@@ -18,7 +18,7 @@ from Bio import Medline
 
 @click.command()
 @click.argument('query')
-@click.option('--output',default="out.tsv",help="The name of the output file.  Should end in .tsv")
+@click.option('--output',default="out",help="The name of the output file.  Should end in .tsv")
 @click.option('--pit',default="???", help='Check if a search term(s) (comma delimited string) is present in the title.')
 @click.option('--pia',default="???", help='Check if a search term (comma delimited string) is present in the abstract.')
 
@@ -29,6 +29,11 @@ def search(query,output,pit,pia):
 	click.echo('Beginning Search')
 	click.echo('Query: '+query)
 
+	# Build the output files
+	main_output = output+".tsv"
+	acc_output = output+"_acc.tsv"
+	bio_output = output+"_bios.tsv"
+
 	# Get the article count
 	handle = Entrez.esearch(db="pubmed",term=query)
 	record = Entrez.read(handle)
@@ -36,7 +41,9 @@ def search(query,output,pit,pia):
 	print("Number of articles: "+str(record['Count']))
 
 	# Get the idlist
-	handle = Entrez.esearch(db="pubmed",term=query,retmax=article_count)
+	# Note: Potentially inefficient - look into using history to get the results without searching a second time.
+	# handle = Entrez.esearch(db="pubmed",term=query,retmax=article_count)
+	handle = Entrez.esearch(db="pubmed",term=query,retmax=100)
 	record = Entrez.read(handle)
 	idlist = record["IdList"]
 
@@ -44,6 +51,61 @@ def search(query,output,pit,pia):
 	handle = Entrez.efetch(db="pubmed",id=idlist,rettype="medline")
 	records = Medline.parse(handle)
 	records = list(records)
+
+	lhandle = Entrez.elink(db="nuccore",dbfrom="pubmed",id=idlist)
+	lrecords = Entrez.read(lhandle)
+
+	# Create the list of pubmed and sequence ids
+	pidlist = []
+	sidlist = []
+	siddict = {}
+	for record in lrecords:
+		if record['LinkSetDb'] != []:
+			current_id = record['IdList'][0]
+			for seq_id_dict in record['LinkSetDb'][0]['Link']:
+				current_seqid = seq_id_dict['Id']
+				pidlist.append(current_id)
+				sidlist.append(current_seqid)
+				if current_id not in siddict:
+					siddict[current_id] = 1
+				else:
+					siddict[current_id] += 1
+
+	#Using the list of sequence ids get the list of pubmedids
+	acc_handle = Entrez.efetch(db="nuccore",id=sidlist,rettype="acc")
+	acc_list = acc_handle.read().split("\n")
+
+	with open(acc_output,"w") as outf:
+		outf.write("PubMed ID\tSequence ID\tGB Accession\n")
+		for i in range(len(pidlist)):
+			outf.write("%s\t%s\t%s\n"%(pidlist[i],sidlist[i],acc_list[i]))
+
+	# Crete the list of pubmed and biosample ids
+	pidlist = []
+	bidlist = []
+	biddict = {}
+	lhandle = Entrez.elink(db="biosample",dbfrom="pubmed",id=idlist)
+	lrecords = Entrez.read(lhandle)
+
+	for record in lrecords:
+		if record['LinkSetDb'] != []:
+			print("Ther be biosamples in them their hills!")
+			current_id = record['IdList'][0]
+			for bio_id_dict in record['LinkSetDb'][0]['Link']:
+				current_bioid = bio_id_dict['Id']
+				pidlist.append(current_id)
+				bidlist.append(current_bioid)
+				if current_id not in biddict:
+					biddict[current_id] = 1
+				else:
+					biddict[current_id] += 1
+
+	with open(bio_output,"w") as outf:
+		outf.write("PubMed ID\tBioSample ID\n")
+		for i in range(len(pidlist)):
+			outf.write("%s\t%s\n"%(pidlist[i],bidlist[i]))
+
+
 
 	# Process the list based options PIA, PIT
 	pia_list = pia.split(",")
@@ -63,9 +125,9 @@ def search(query,output,pit,pia):
 		num_pit_terms = len(pit_list)
 
 	# Write a default text file
-	with open(output,"w") as outf:
+	with open(main_output,"w") as outf:
 		# Create the header for the output tsv file
-		outf.write("PubMed ID \t PubMed Central ID \t Title \t Authors \t Year of Publication \t Month of Publication \t Digital Object Identifier")
+		outf.write("PubMed ID \t PubMed Central ID \t Title \t Authors \t Year of Publication \t Month of Publication \t Digital Object Identifier \t Accession Count \t Biosample Count \n")
 		if pit != '???':
 			for term in pit_list:
 				outf.write(" \t "+term+"[PIT]")
@@ -77,7 +139,8 @@ def search(query,output,pit,pia):
 		# Write the details of each record
 		for record in records:
 			# Write the PubMed ID
-			outf.write(record.get("PMID","?"))
+			pmid = record.get("PMID","?")
+			outf.write(pmid)
 			# Write the PubMed Central ID
 			outf.write("\t")
 			outf.write(record.get("PMC","?"))
@@ -139,6 +202,21 @@ def search(query,output,pit,pia):
 						outf.write("1")
 					else:
 						outf.write("0")
+
+
+			outf.write("\t")
+			if pmid in siddict:
+				outf.write(str(siddict[pmid]))
+			else:
+				outf.write("0")
+
+
+			outf.write("\t")
+			if pmid in biddict:
+				outf.write(str(biddict[pmid]))
+			else:
+				outf.write("0")
+
 
 			outf.write("\n")
 
