@@ -43,16 +43,20 @@ def search(query,output,pit,pia):
 	# Get the idlist
 	# Note: Potentially inefficient - look into using history to get the results without searching a second time.
 	# handle = Entrez.esearch(db="pubmed",term=query,retmax=article_count)
-	handle = Entrez.esearch(db="pubmed",term=query,retmax=100)
+	print("Get the idList")
+	handle = Entrez.esearch(db="pubmed",term=query,retmax=article_count)
 	record = Entrez.read(handle)
 	idlist = record["IdList"]
 
 	# Get the records
+	print("Get the medline records.")
 	handle = Entrez.efetch(db="pubmed",id=idlist,rettype="medline")
 	records = Medline.parse(handle)
 	records = list(records)
 
-	lhandle = Entrez.elink(db="nuccore",dbfrom="pubmed",id=idlist)
+	# Get the accessions related to the pubmed id
+	print("Using elink to get nucleotide sequence ids from the nucleotide core from pubmed.")
+	lhandle = Entrez.elink(db="nuccore",dbfrom="pubmed",id=idlist,linkname="pubmed_nucleotide_accn")
 	lrecords = Entrez.read(lhandle)
 
 	# Create the list of pubmed and sequence ids
@@ -71,19 +75,27 @@ def search(query,output,pit,pia):
 				else:
 					siddict[current_id] += 1
 
-	#Using the list of sequence ids get the list of pubmedids
-	acc_handle = Entrez.efetch(db="nuccore",id=sidlist,rettype="acc")
-	acc_list = acc_handle.read().split("\n")
+	# #Using the list of sequence ids get the list of accessuib ids
+	# print("Fetch the accessions from the nucleotide core using the sequence id list.")
+	# acc_handle = Entrez.efetch(db="nuccore",id=sidlist,rettype="acc")
+	# acc_list = acc_handle.read().split("\n")
+	# # The last element of the list is an artifact of the splitting process so we remove it.
+	# acc_list.pop()
+	# spid = set(pidlist)
+	# print("no. publications: %d pidlist: %d, sidlist: %d, acc_list: %d"%(len(spid),len(pidlist),len(sidlist),len(acc_list)))
+	# for el in spid:
+	# 	print("[%s]: %d"%(el,pidlist.count(el)))
 
-	with open(acc_output,"w") as outf:
-		outf.write("PubMed ID\tSequence ID\tGB Accession\n")
-		for i in range(len(pidlist)):
-			outf.write("%s\t%s\t%s\n"%(pidlist[i],sidlist[i],acc_list[i]))
+	# with open(acc_output,"w") as outf:
+	# 	outf.write("PubMed ID\tSequence ID\tGB Accession\n")
+	# 	for i in range(len(pidlist)):
+	# 		outf.write("%s\t%s\t%s\n"%(pidlist[i],sidlist[i],acc_list[i]))
 
 	# Crete the list of pubmed and biosample ids
 	pidlist = []
 	bidlist = []
 	biddict = {}
+	print("Using elink to get biosample ids from the biosample database using the pubmed id list.")
 	lhandle = Entrez.elink(db="biosample",dbfrom="pubmed",id=idlist)
 	lrecords = Entrez.read(lhandle)
 
@@ -100,12 +112,10 @@ def search(query,output,pit,pia):
 				else:
 					biddict[current_id] += 1
 
-	with open(bio_output,"w") as outf:
-		outf.write("PubMed ID\tBioSample ID\n")
-		for i in range(len(pidlist)):
-			outf.write("%s\t%s\n"%(pidlist[i],bidlist[i]))
-
-
+	# with open(bio_output,"w") as outf:
+	# 	outf.write("PubMed ID\tBioSample ID\n")
+	# 	for i in range(len(pidlist)):
+	# 		outf.write("%s\t%s\n"%(pidlist[i],bidlist[i]))
 
 	# Process the list based options PIA, PIT
 	pia_list = pia.split(",")
@@ -125,9 +135,10 @@ def search(query,output,pit,pia):
 		num_pit_terms = len(pit_list)
 
 	# Write a default text file
+	print("Writing main .tsv")
 	with open(main_output,"w") as outf:
 		# Create the header for the output tsv file
-		outf.write("PubMed ID \t PubMed Central ID \t Title \t Authors \t Year of Publication \t Month of Publication \t Digital Object Identifier \t Accession Count \t Biosample Count \n")
+		outf.write("PubMed ID \t PubMed Central ID \t Title \t Authors \t Year of Publication \t Month of Publication \t Digital Object Identifier \t Accession Count \t Biosample Count")
 		if pit != '???':
 			for term in pit_list:
 				outf.write(" \t "+term+"[PIT]")
@@ -184,6 +195,21 @@ def search(query,output,pit,pia):
 			doi = "http://doi.org//"+doi
 			outf.write(doi)
 
+			# Write the accession count
+			outf.write("\t")
+			if pmid in siddict:
+				outf.write(str(siddict[pmid]))
+			else:
+				outf.write("0")
+
+
+			# Write the biosample count
+			outf.write("\t")
+			if pmid in biddict:
+				outf.write(str(biddict[pmid]))
+			else:
+				outf.write("0")
+
 			# Write the present in title columns
 			if pit!='???':
 				for term in pit_list:
@@ -202,20 +228,6 @@ def search(query,output,pit,pia):
 						outf.write("1")
 					else:
 						outf.write("0")
-
-
-			outf.write("\t")
-			if pmid in siddict:
-				outf.write(str(siddict[pmid]))
-			else:
-				outf.write("0")
-
-
-			outf.write("\t")
-			if pmid in biddict:
-				outf.write(str(biddict[pmid]))
-			else:
-				outf.write("0")
 
 
 			outf.write("\n")
