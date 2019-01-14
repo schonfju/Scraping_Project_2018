@@ -6,8 +6,11 @@ README
 Requires a credentials.dat file.  The file should have three lines and specify:
 
 your_email
+
 ncbi_API_key
+
 ncbi_API_login
+
 
 OPTIONS
 ---------
