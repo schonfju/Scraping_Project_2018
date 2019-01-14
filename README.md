@@ -22,6 +22,9 @@ Check if a term or terms is present in the title
 
 EXAMPLE USAGE
 ----------------
+
 python model_scraper.py "host range"
+
 python model_scraper.py --output "my_papers.tsv" "e coli plasmid incF"
+
 python model_scraper.py --output "my_papers.tsv" "esserchi coli" --pit "plasmid,incF,incAC"
